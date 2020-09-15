@@ -72,7 +72,43 @@ func EncodeRowKeyWithHandle(tableID int64, handle int64) kv.Key {
 // DecodeRecordKey decodes the key and gets the tableID, handle.
 func DecodeRecordKey(key kv.Key) (tableID int64, handle int64, err error) {
 	/* Your code here */
+	if FormatMatchRecordKey(key) == false {
+		return 0, 0, errInvalidRecordKey.GenWithStack("invalid record key - %q", key)
+	}
+
+	key = key[tablePrefixLength:]
+	key, tableID, err = codec.DecodeInt(key)
+	if err != nil {
+		err = errors.Trace(err)
+		return
+	}
+
+	key = key[recordPrefixSepLength:]
+	key, handle, err = codec.DecodeInt(key)
+	if err != nil {
+		err = errors.Trace(err)
+		return
+	}
 	return
+}
+
+// FormatMatchRecordKey judge key's format is match RecordKey or not
+func FormatMatchRecordKey(key kv.Key) bool {
+	if len(key) != RecordRowKeyLen {
+		return false
+	}
+	if key[0] != tablePrefix[0] {
+		return false
+	}
+
+	if key[idLen+1] != recordPrefixSep[0] {
+		return false
+	}
+	if key[idLen+2] != recordPrefixSep[1] {
+		return false
+	}
+
+	return true
 }
 
 // appendTableIndexPrefix appends table index prefix  "t[tableID]_i".
@@ -95,7 +131,45 @@ func EncodeIndexSeekKey(tableID int64, idxID int64, encodedValue []byte) kv.Key 
 // DecodeIndexKeyPrefix decodes the key and gets the tableID, indexID, indexValues.
 func DecodeIndexKeyPrefix(key kv.Key) (tableID int64, indexID int64, indexValues []byte, err error) {
 	/* Your code here */
+	if !FormatMatchSeekKey(key) {
+		return 0, 0, nil, errInvalidIndexKey.GenWithStack("invalid Seek key - %q", key)
+	}
+
+	key = key[tablePrefixLength:]
+	key, tableID, err = codec.DecodeInt(key)
+	if err != nil {
+		err = errors.Trace(err)
+		return
+	}
+
+	key = key[len(indexPrefixSep):]
+	key, indexID, err = codec.DecodeInt(key)
+	if err != nil {
+		err = errors.Trace(err)
+		return
+	}
+
+	indexValues = key
 	return tableID, indexID, indexValues, nil
+}
+
+// FormatMatchSeekKey judge key's format is match SeekKey or not
+func FormatMatchSeekKey(key kv.Key) bool {
+	if len(key) <= RecordRowKeyLen {
+		return false
+	}
+	if !key.HasPrefix(tablePrefix) {
+		return false
+	}
+
+	if key[idLen+1] != indexPrefixSep[0] {
+		return false
+	}
+	if key[idLen+2] != indexPrefixSep[1] {
+		return false
+	}
+
+	return true
 }
 
 // DecodeIndexKey decodes the key and gets the tableID, indexID, indexValues.
